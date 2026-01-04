@@ -85,8 +85,15 @@ class WeatherTask(BaseTask):
 
                 # Step 2: Fetch weather data
                 # Convert units for Open-Meteo API
-                temp_unit = "celsius" if units == "metric" else "fahrenheit"
-                wind_unit = "kmh" if units == "metric" else "mph"
+                if units == "metric":
+                    temp_unit = "celsius"
+                    wind_unit = "kmh"
+                elif units == "imperial":
+                    temp_unit = "fahrenheit"
+                    wind_unit = "mph"
+                else:  # kelvin
+                    temp_unit = "celsius"  # Open-Meteo doesn't support kelvin directly
+                    wind_unit = "ms"  # Use m/s for scientific units
 
                 weather_response = await client.get(
                     WEATHER_URL,
@@ -128,6 +135,16 @@ class WeatherTask(BaseTask):
                 current.get("weather_code", 0)
             )
 
+            # Get temperature values
+            temp_current = current.get("temperature_2m")
+            temp_feels_like = current.get("apparent_temperature")
+
+            # Convert to kelvin if requested (Open-Meteo returns celsius)
+            if units == "kelvin" and temp_current is not None:
+                temp_current = round(temp_current + 273.15, 2)
+            if units == "kelvin" and temp_feels_like is not None:
+                temp_feels_like = round(temp_feels_like + 273.15, 2)
+
             # Build response matching the original format
             weather_info = {
                 "city": city_name,
@@ -142,8 +159,8 @@ class WeatherTask(BaseTask):
                     "icon": weather_description["icon"],
                 },
                 "temperature": {
-                    "current": current.get("temperature_2m"),
-                    "feels_like": current.get("apparent_temperature"),
+                    "current": temp_current,
+                    "feels_like": temp_feels_like,
                     "min": None,  # Open-Meteo current weather doesn't include min/max
                     "max": None,
                     "units": units,

@@ -11,7 +11,7 @@ import structlog
 
 from app.config import get_settings
 from app.core.database import get_session_context
-from app.core.metrics import task_execution_duration
+from app.core.metrics import task_execution_duration, tasks_by_status
 from app.models.task import Task, TaskStatus
 
 settings = get_settings()
@@ -60,6 +60,9 @@ class BaseTask(ABC):
             if task:
                 task.status = TaskStatus.RUNNING.value
                 await session.commit()
+                # Update status gauges: pending → running
+                tasks_by_status.labels(status="pending").dec()
+                tasks_by_status.labels(status="running").inc()
 
         try:
             result = await self.execute(**parameters)
@@ -72,6 +75,9 @@ class BaseTask(ABC):
                     task.result = result
                     task.completed_at = datetime.utcnow()
                     await session.commit()
+                    # Update status gauges: running → completed
+                    tasks_by_status.labels(status="running").dec()
+                    tasks_by_status.labels(status="completed").inc()
 
             duration = time.time() - start_time
             task_execution_duration.labels(task_name=self.task_name).observe(duration)
@@ -94,6 +100,9 @@ class BaseTask(ABC):
                     task.error_message = str(e)
                     task.completed_at = datetime.utcnow()
                     await session.commit()
+                    # Update status gauges: running → failed
+                    tasks_by_status.labels(status="running").dec()
+                    tasks_by_status.labels(status="failed").inc()
 
             duration = time.time() - start_time
             task_execution_duration.labels(task_name=self.task_name).observe(duration)
