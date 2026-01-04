@@ -1,0 +1,162 @@
+services:
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tasker-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://tasker:tasker@postgres:5432/tasker
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - LOG_LEVEL=INFO
+      - LOG_JSON=true
+      - METRICS_ENABLED=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tasker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Celery Worker (scalable - no container_name to allow replicas)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql+asyncpg://tasker:tasker@postgres:5432/tasker
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - LOG_LEVEL=INFO
+      - LOG_JSON=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tasker-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: tasker-postgres
+    environment:
+      - POSTGRES_USER=tasker
+      - POSTGRES_PASSWORD=tasker
+      - POSTGRES_DB=tasker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Using 5433 on host to avoid conflicts
+    networks:
+      - tasker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasker -d tasker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Broker + Cache)
+  redis:
+    image: redis:7-alpine
+    container_name: tasker-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - tasker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Prometheus (Metrics)
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: tasker-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    networks:
+      - tasker-network
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # Flower (Celery Monitoring)
+  flower:
+    image: mher/flower:2.0
+    container_name: tasker-flower
+    command: celery --broker=redis://redis:6379/1 flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+      - worker
+    networks:
+      - tasker-network
+    restart: unless-stopped
+
+  # Database Migrations
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tasker-migrations
+    command: alembic upgrade head
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://tasker:tasker@postgres:5432/tasker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tasker-network
+    restart: "no"
+
+networks:
+  tasker-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+

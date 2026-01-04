@@ -1,0 +1,48 @@
+# Prometheus configuration for Tasker
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # Attach labels to any time series or alerts
+  external_labels:
+    monitor: "tasker-monitor"
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files (optional)
+# rule_files:
+#   - "first_rules.yml"
+#   - "second_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Tasker API
+  - job_name: "tasker-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: "tasker-api"
+
+  # Redis (requires redis_exporter)
+  # - job_name: "redis"
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+
+  # PostgreSQL (requires postgres_exporter)
+  # - job_name: "postgres"
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]
+

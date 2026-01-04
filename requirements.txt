@@ -1,0 +1,38 @@
+# Core Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# Database
+sqlalchemy[asyncio]>=2.0.36
+asyncpg>=0.30.0
+alembic>=1.14.0
+# Note: psycopg2-binary only needed for Alembic sync migrations
+psycopg2-binary>=2.9.10
+
+# Task Queue
+celery[redis]>=5.4.0
+redis>=5.2.0
+
+# HTTP Client
+httpx>=0.28.0
+openai>=1.57.0
+
+# Monitoring & Logging
+prometheus-client>=0.21.0
+prometheus-fastapi-instrumentator>=7.0.0
+structlog>=24.4.0
+
+# Security
+python-multipart>=0.0.9
+
+# Testing
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+fakeredis>=2.26.0
+aiosqlite>=0.20.0
+
+# Development
+python-dotenv>=1.0.0
