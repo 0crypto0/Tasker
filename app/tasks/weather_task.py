@@ -116,18 +116,19 @@ class WeatherTask(BaseTask):
                     },
                 )
 
-            duration = time.time() - start_time
+                duration = time.time() - start_time
 
-            if weather_response.status_code != 200:
-                external_api_requests.labels(api_name="open_meteo", status="error").inc()
-                raise RuntimeError(
-                    f"Open-Meteo Weather API error: {weather_response.status_code}"
-                )
+                if weather_response.status_code != 200:
+                    external_api_requests.labels(api_name="open_meteo", status="error").inc()
+                    raise RuntimeError(
+                        f"Open-Meteo Weather API error: {weather_response.status_code}"
+                    )
 
-            external_api_requests.labels(api_name="open_meteo", status="success").inc()
-            external_api_duration.labels(api_name="open_meteo").observe(duration)
+                external_api_requests.labels(api_name="open_meteo", status="success").inc()
+                external_api_duration.labels(api_name="open_meteo").observe(duration)
 
-            data = weather_response.json()
+                # Parse response inside context manager before connection is closed
+                data = weather_response.json()
             current = data.get("current", {})
 
             # Map weather codes to descriptions
